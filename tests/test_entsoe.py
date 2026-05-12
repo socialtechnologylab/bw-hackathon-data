@@ -18,18 +18,16 @@ from bw_hackathon_data.entsoe import (
     fetch_wind,
 )
 
-UTC = UTC
 
-
-def _hourly_pandas_series(start: datetime, values: list[float], name: str) -> pd.Series:
+def _hourly_pandas_series(start: datetime, values: list[float]) -> pd.Series:
     idx = pd.date_range(start=start, periods=len(values), freq="h", tz="UTC")
-    return pd.Series(values, index=idx, name=name)
+    return pd.Series(values, index=idx)
 
 
 def test_fetch_solar_returns_timestamp_value_parquet_shape():
     """B16 series → (timestamp str ISO-8601 UTC, solar_mwh float) DataFrame."""
     client = MagicMock()
-    series = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [0.0, 5.0, 50.0, 80.0], "B16")
+    series = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [0.0, 5.0, 50.0, 80.0])
     # entsoe-py returns a DataFrame keyed by PSR code → series.
     client.query_generation.return_value = pd.DataFrame({"B16": series})
 
@@ -50,8 +48,8 @@ def test_fetch_wind_sums_b17_and_b18():
     second.
     """
     client = MagicMock()
-    onshore = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [100.0, 200.0, 150.0], "B17")
-    offshore = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [50.0, 60.0, 70.0], "B18")
+    onshore = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [100.0, 200.0, 150.0])
+    offshore = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [50.0, 60.0, 70.0])
     client.query_generation.side_effect = [
         pd.DataFrame({"B17": onshore}),
         pd.DataFrame({"B18": offshore}),
@@ -65,7 +63,7 @@ def test_fetch_wind_sums_b17_and_b18():
 def test_fetch_wind_handles_missing_offshore_column():
     """If B18 isn't in the response (e.g. unavailable), treat as zero."""
     client = MagicMock()
-    onshore = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [100.0, 200.0], "B17")
+    onshore = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [100.0, 200.0])
     client.query_generation.side_effect = [
         pd.DataFrame({"B17": onshore}),
         pd.DataFrame(),  # empty offshore response
@@ -79,9 +77,7 @@ def test_fetch_wind_handles_missing_offshore_column():
 def test_fetch_demand_uses_query_load():
     """Demand goes through query_load, returns single-column shape."""
     client = MagicMock()
-    series = _hourly_pandas_series(
-        datetime(2025, 1, 1, tzinfo=UTC), [9000.0, 9500.0], "Actual Load"
-    )
+    series = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [9000.0, 9500.0])
     client.query_load.return_value = pd.DataFrame({"Actual Load": series})
 
     df = fetch_demand(client, datetime(2025, 1, 1, tzinfo=UTC), datetime(2025, 1, 1, 2, tzinfo=UTC))
@@ -93,7 +89,7 @@ def test_fetch_demand_uses_query_load():
 def test_fetch_demand_falls_back_to_first_column_if_named_differently():
     """entsoe-py sometimes returns 'Actual Load' or just an unnamed column."""
     client = MagicMock()
-    series = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [9000.0, 9500.0], "0")
+    series = _hourly_pandas_series(datetime(2025, 1, 1, tzinfo=UTC), [9000.0, 9500.0])
     client.query_load.return_value = pd.DataFrame({"0": series})
 
     df = fetch_demand(client, datetime(2025, 1, 1, tzinfo=UTC), datetime(2025, 1, 1, 2, tzinfo=UTC))

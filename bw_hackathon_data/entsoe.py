@@ -24,12 +24,10 @@ def _series_to_parquet_df(series: pd.Series) -> pl.DataFrame:
     idx: pd.DatetimeIndex = series.index  # type: ignore[assignment]
     if idx.tz is None:
         idx = idx.tz_localize("UTC")
-    timestamps = idx.strftime("%Y-%m-%dT%H:%M:%S%z").map(
-        lambda s: s[:-2] + ":" + s[-2:] if len(s) >= 5 else s
-    )
+    # pd.Timestamp.isoformat() emits full ISO-8601 with `+00:00` natively.
     return pl.DataFrame(
         {
-            "timestamp": timestamps.tolist(),
+            "timestamp": [ts.isoformat() for ts in idx],
             "value": series.astype(float).tolist(),
         }
     )
@@ -48,7 +46,13 @@ def fetch_solar(client: Any, start: datetime, end: datetime) -> pl.DataFrame:
 
 
 def fetch_wind(client: Any, start: datetime, end: datetime) -> pl.DataFrame:
-    """B17 (Wind Onshore) + B18 (Wind Offshore) summed, Belgium, hourly MWh."""
+    """B17 (Wind Onshore) + B18 (Wind Offshore) summed, Belgium, hourly MWh.
+
+    Onshore tolerates a first-column fallback (entsoe-py occasionally returns
+    the series under an unexpected name). Offshore requires the B18 column
+    exactly — if it's missing or empty, treat as zero rather than risk
+    silently picking up the wrong PSR.
+    """
     onshore = client.query_generation(
         country_code=config.ENTSOE_AREA_BE,
         start=pd.Timestamp(start),
@@ -62,17 +66,18 @@ def fetch_wind(client: Any, start: datetime, end: datetime) -> pl.DataFrame:
         psr_type=config.ENTSOE_PSR_WIND_OFFSHORE,
     )
 
-    def _col(df: pd.DataFrame, code: str) -> pd.Series:
-        col: pd.Series = df[code] if code in df.columns else df.iloc[:, 0]  # type: ignore[assignment]
-        return col
+    s_on: pd.Series = (
+        onshore[config.ENTSOE_PSR_WIND_ONSHORE]
+        if config.ENTSOE_PSR_WIND_ONSHORE in onshore.columns
+        else onshore.iloc[:, 0]
+    )
+    s_off: pd.Series | None = (
+        offshore[config.ENTSOE_PSR_WIND_OFFSHORE]
+        if config.ENTSOE_PSR_WIND_OFFSHORE in offshore.columns
+        else None
+    )
 
-    s_on = _col(onshore, config.ENTSOE_PSR_WIND_ONSHORE)
-    s_off = _col(offshore, config.ENTSOE_PSR_WIND_OFFSHORE) if not offshore.empty else None
-
-    summed = s_on.copy()
-    if s_off is not None:
-        summed = summed.add(s_off, fill_value=0.0)
-
+    summed = s_on if s_off is None else s_on.add(s_off, fill_value=0.0)
     return _series_to_parquet_df(summed)
 
 
