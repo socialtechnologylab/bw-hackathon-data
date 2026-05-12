@@ -1,18 +1,9 @@
 """Shared pytest fixtures."""
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
-
-UTC = timezone.utc
-
-
-@pytest.fixture
-def utc():
-    """Re-export of timezone.utc for test convenience."""
-    return UTC
 
 
 @pytest.fixture

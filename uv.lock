@@ -82,7 +82,7 @@ requires-dist = [
     { name = "polars", specifier = ">=1.0" },
     { name = "pyarrow", specifier = ">=15" },
     { name = "python-dotenv", specifier = ">=1" },
-    { name = "xarray", specifier = ">=2024.0" },
+    { name = "xarray", specifier = ">=2024.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -319,7 +319,7 @@ name = "eccodeslib"
 version = "2.46.2.19"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "eckitlib" },
+    { name = "eckitlib", marker = "sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/b6/c2dab62331d291aa0e3d39d5a7021d3403d221a68d929dd9c0142ad5e847/eccodeslib-2.46.2.19-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:592295430695846ca258fe46f7cb8fc937331bc722e5ad56efca45b743b6374d", size = 8900035, upload-time = "2026-04-01T12:07:25.69Z" },

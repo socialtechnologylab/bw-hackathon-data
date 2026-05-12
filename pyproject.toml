@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "entsoe-py>=0.5.10",
     "herbie-data>=2024.5.0",
-    "xarray>=2024.0",
+    "xarray>=2024.2",
     "cfgrib>=0.9.10",
     "polars>=1.0",
     "pyarrow>=15",
