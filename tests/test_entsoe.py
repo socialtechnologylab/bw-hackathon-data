@@ -40,6 +40,24 @@ def test_fetch_solar_returns_timestamp_value_parquet_shape():
     assert df["value"].to_list() == [0.0, 5.0, 50.0, 80.0]
 
 
+def test_fetch_solar_converts_brussels_local_time_to_utc():
+    """ENTSO-E returns Brussels-local timestamps (+01:00 in winter); we must
+    convert to UTC before emitting. Regression test for the pilot's Task 12
+    discovery that ENTSO-E timestamps came out as `+01:00` not `+00:00`."""
+    client = MagicMock()
+    # Build a series with CET (winter) tz: 00:00 Brussels = 23:00 UTC previous day.
+    idx = pd.date_range(start="2025-01-01 00:00", periods=3, freq="h", tz="Europe/Brussels")
+    series = pd.Series([0.0, 10.0, 50.0], index=idx)
+    client.query_generation.return_value = pd.DataFrame({"B16": series})
+
+    df = fetch_solar(client, datetime(2025, 1, 1, tzinfo=UTC), datetime(2025, 1, 1, 4, tzinfo=UTC))
+
+    # First Brussels-CET timestamp (00:00 Brussels = 23:00 UTC the previous day).
+    assert df["timestamp"][0] == "2024-12-31T23:00:00+00:00"
+    assert df["timestamp"][1] == "2025-01-01T00:00:00+00:00"
+    assert df["timestamp"][2] == "2025-01-01T01:00:00+00:00"
+
+
 def test_fetch_wind_sums_b17_and_b18():
     """B17 + B18 → single summed `value` column.
 

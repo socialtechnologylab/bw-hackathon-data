@@ -20,11 +20,18 @@ from bw_hackathon_data import config
 
 
 def _series_to_parquet_df(series: pd.Series) -> pl.DataFrame:
-    """Convert a tz-aware hourly pandas Series → (timestamp, value) polars DF."""
+    """Convert an hourly pandas Series → (timestamp, value) polars DF.
+
+    Timestamps are emitted as ISO-8601 strings with an explicit `+00:00` UTC
+    offset. ENTSO-E returns series indexed by the requested country's local
+    time (Brussels is CET/CEST, not UTC), so we convert here rather than rely
+    on the caller's tz assumption.
+    """
     idx: pd.DatetimeIndex = series.index  # type: ignore[assignment]
     if idx.tz is None:
         idx = idx.tz_localize("UTC")
-    # pd.Timestamp.isoformat() emits full ISO-8601 with `+00:00` natively.
+    else:
+        idx = idx.tz_convert("UTC")
     return pl.DataFrame(
         {
             "timestamp": [ts.isoformat() for ts in idx],

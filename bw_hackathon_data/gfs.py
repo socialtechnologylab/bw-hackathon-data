@@ -98,7 +98,13 @@ def fetch_cycle(cycle: datetime, cache_dir: Path) -> Path:
         # merge them on the shared coords. Cast needed because Herbie has no
         # type stubs and pyright infers an overly-broad return type.
         if isinstance(raw, list):
-            ds: xr.Dataset = xr.merge(cast(list[xr.Dataset], raw))
+            # compat='override' is required: cfgrib splits T2m (2 m) and
+            # U10/V10 (10 m) into separate datasets that share the
+            # heightAboveGround coordinate but with different values.
+            # 'override' keeps the first dataset's coordinate value, which
+            # is harmless because we only use the data variables, not the
+            # heightAboveGround coord, in aggregate_to_belgium_means.
+            ds: xr.Dataset = xr.merge(cast(list[xr.Dataset], raw), compat="override")
         else:
             ds = cast(xr.Dataset, raw)
         ds = ds.expand_dims({"step": [np.timedelta64(fxx, "h")]})
@@ -114,6 +120,8 @@ def fetch_cycle(cycle: datetime, cache_dir: Path) -> Path:
         )
     if "tcc" in merged.data_vars:
         merged["tcc"] = merged["tcc"] / 100.0  # → fraction
+    if "t2m" in merged.data_vars:
+        merged["t2m"] = merged["t2m"] - 273.15  # K → °C (cfgrib decodes t2m as Kelvin)
 
     # Drop renames whose source variable wasn't returned for this cycle.
     var_rename = {k: v for k, v in config.GFS_VAR_RENAME.items() if k in merged.data_vars}

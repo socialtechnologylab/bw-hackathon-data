@@ -38,7 +38,7 @@ README_TEMPLATE = """# {display_name} — data
 | Column | Description | Units |
 |---|---|---|
 | `timestamp` | ISO-8601 hourly timestamp, UTC | — |
-| `ghi_fcst` | Forecast global horizontal irradiance (GFS `dswrf`) | W/m² |
+| `ghi_fcst` | Forecast global horizontal irradiance (GFS `sdswrf`) | W/m² |
 | `t2m_fcst` | Forecast 2-metre air temperature (GFS `tmp`) | °C |
 | `wind10m_fcst` | Forecast 10-metre wind speed (GFS magnitude of u,v) | m/s |
 | `cloud_cover_fcst` | Forecast total cloud cover (GFS `tcdc` / 100) | 0–1 |

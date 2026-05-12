@@ -28,14 +28,22 @@ GFS_HERBIE_SEARCH = "|".join(
 )
 
 GFS_CYCLE_HOURS = (0, 6, 12, 18)
-GFS_FXX_RANGE = range(0, 31)  # forecast hours 0..30 inclusive (>= max task L)
+# With 4 cycles/day the fxx values used per task are:
+#   solar/temp/demand-1d-ahead (lead=24h): fxx 24..29 (cutoff lands 24h behind target)
+#   wind-2h-ahead (lead=2h): fxx 2..7
+# Covering both: range(2, 30).
+GFS_FXX_RANGE = range(2, 30)
 
 # After Herbie returns the GRIB-decoded Dataset, cfgrib names the variables
-# `dswrf`, `t2m`, `tcc`, `u10`, `v10`. The wind feature is u10/v10 combined
-# into magnitude under the synthetic name `wind10m_fcst`. This is the single
+# `sdswrf` (surface downward SW flux; used to be `dswrf` in older cfgrib),
+# `t2m`, `tcc`, `u10`, `v10`. The wind feature is u10/v10 combined into
+# magnitude under the synthetic name `wind10m_fcst`. This is the single
 # source of truth for the GRIB-var → feature-column mapping.
+#
+# NOTE: confirmed against GFS pgrb2.0p25 2025-01 via Herbie + cfgrib 0.9.x:
+#   dataset 4 returns var `sdswrf` (not `dswrf`).
 GFS_VAR_RENAME: dict[str, str] = {
-    "dswrf": "ghi_fcst",
+    "sdswrf": "ghi_fcst",
     "t2m": "t2m_fcst",
     "wind10m_fcst": "wind10m_fcst",
     "tcc": "cloud_cover_fcst",
