@@ -42,16 +42,17 @@ def aggregate_to_belgium_means(
     lat_lo, lat_hi = bbox_lat
     lon_lo, lon_hi = bbox_lon
 
-    cropped = ds.sel(latitude=slice(lat_lo, lat_hi), longitude=slice(lon_lo, lon_hi))
-    if cropped.latitude.size == 0 or cropped.longitude.size == 0:
-        # Fallback: some GRIBs index latitude in descending order.
-        cropped = ds.sel(latitude=slice(lat_hi, lat_lo), longitude=slice(lon_lo, lon_hi))
+    # Some GFS GRIBs index latitude from 90 → -90 (descending). Normalize to
+    # ascending up-front so the subsequent slice works unconditionally, and a
+    # zero-size result surfaces as a real bbox bug rather than a silent retry.
+    if ds.latitude.values[0] > ds.latitude.values[-1]:
+        ds = ds.isel(latitude=slice(None, None, -1))
 
+    cropped = ds.sel(latitude=slice(lat_lo, lat_hi), longitude=slice(lon_lo, lon_hi))
     means = cropped.mean(dim=("latitude", "longitude"))
 
-    # `step` is a timedelta; convert to integer hours.
-    steps_ns = means.step.values.astype("timedelta64[ns]").astype(np.int64)
-    fxx_hours = (steps_ns // (3_600 * 1_000_000_000)).astype(int)
+    # `step` is a timedelta; convert to integer forecast hours.
+    fxx_hours = (means.step.values / np.timedelta64(1, "h")).astype(int)
 
     cycle_iso = cycle.isoformat()
 
@@ -114,14 +115,8 @@ def fetch_cycle(cycle: datetime, cache_dir: Path) -> Path:
     if "tcc" in merged.data_vars:
         merged["tcc"] = merged["tcc"] / 100.0  # → fraction
 
-    var_rename = {
-        "dswrf": "ghi_fcst",
-        "t2m": "t2m_fcst",
-        "wind10m_fcst": "wind10m_fcst",
-        "tcc": "cloud_cover_fcst",
-    }
     # Drop renames whose source variable wasn't returned for this cycle.
-    var_rename = {k: v for k, v in var_rename.items() if k in merged.data_vars}
+    var_rename = {k: v for k, v in config.GFS_VAR_RENAME.items() if k in merged.data_vars}
 
     df = aggregate_to_belgium_means(
         merged,

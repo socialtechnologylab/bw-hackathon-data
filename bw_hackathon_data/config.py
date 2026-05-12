@@ -30,6 +30,17 @@ GFS_HERBIE_SEARCH = "|".join(
 GFS_CYCLE_HOURS = (0, 6, 12, 18)
 GFS_FXX_RANGE = range(0, 31)  # forecast hours 0..30 inclusive (>= max task L)
 
+# After Herbie returns the GRIB-decoded Dataset, cfgrib names the variables
+# `dswrf`, `t2m`, `tcc`, `u10`, `v10`. The wind feature is u10/v10 combined
+# into magnitude under the synthetic name `wind10m_fcst`. This is the single
+# source of truth for the GRIB-var → feature-column mapping.
+GFS_VAR_RENAME: dict[str, str] = {
+    "dswrf": "ghi_fcst",
+    "t2m": "t2m_fcst",
+    "wind10m_fcst": "wind10m_fcst",
+    "tcc": "cloud_cover_fcst",
+}
+
 
 # ── Task metadata ─────────────────────────────────────────────────────────────
 
