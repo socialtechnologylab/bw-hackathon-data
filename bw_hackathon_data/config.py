@@ -89,8 +89,10 @@ ENTSOE_PSR_WIND_OFFSHORE = "B18"
 
 # ── NOAA ISD ──────────────────────────────────────────────────────────────────
 
-# Brussels Airport (EBBR). Format: <USAF>-<WBAN>, used in NOAA ISD filenames.
-ISD_STATION_EBBR = "064510-99999"
+# Brussels Airport (EBBR). NOAA ISD recently renamed per-station CSVs from
+# `<USAF>-<WBAN>.csv` (hyphenated) to `<USAF><WBAN>.csv` (concatenated).
+# Using the new format; if the rename ever flips back, drop the underscore.
+ISD_STATION_EBBR = "06451099999"
 
 
 # ── Pipeline windows ──────────────────────────────────────────────────────────

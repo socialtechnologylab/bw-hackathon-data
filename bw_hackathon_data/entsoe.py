@@ -89,11 +89,21 @@ def fetch_wind(client: Any, start: datetime, end: datetime) -> pl.DataFrame:
 
 
 def fetch_demand(client: Any, start: datetime, end: datetime) -> pl.DataFrame:
-    """Actual Total Load, Belgium, hourly MWh."""
+    """Actual Total Load, Belgium, hourly MWh.
+
+    ENTSO-E publishes Belgian ATL at 15-minute cadence (1 MTU = 15 min); the
+    hackathon contract is hourly UTC. Resample to hourly mean — ATL is
+    average power over the MTU, so the hourly mean of 4 quarter-hourly
+    values is the correct hourly average power.
+    """
     df = client.query_load(
         country_code=config.ENTSOE_AREA_BE,
         start=pd.Timestamp(start),
         end=pd.Timestamp(end),
     )
     series = df["Actual Load"] if "Actual Load" in df.columns else df.iloc[:, 0]
+    # Resample to hourly mean. label='left' so the hour-mark stamps the START
+    # of the hour (e.g. 00:00 = mean over 00:00–00:59), matching how solar /
+    # wind are emitted by ENTSO-E.
+    series = series.resample("1h", label="left", closed="left").mean()
     return _series_to_parquet_df(series)

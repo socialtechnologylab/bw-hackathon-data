@@ -71,7 +71,15 @@ def main() -> None:
         print(f"[isd] cached at {out}, skipping")
         return
 
-    years = list(range(config.TRAIN_START.year, config.TEST_END.year + 1))
+    # TEST_END is exclusive (e.g. 2026-01-01 means "up through end of 2025").
+    # Only include a year that contains at least one hour in the window.
+    last_year = (
+        config.TEST_END.year
+        if (config.TEST_END.month, config.TEST_END.day) > (1, 1)
+        else config.TEST_END.year - 1
+    )
+    years = list(range(config.TRAIN_START.year, last_year + 1))
+    print(f"[isd] fetching years {years[0]}..{years[-1]}")
     all_lines: list[str] = []
     for y in years:
         all_lines.extend(fetch_year(y))
