@@ -42,11 +42,12 @@ def _parse_one_line(line: str) -> tuple[str, int, float] | None:
     if minute > 30:
         return None
 
-    # The temperature token is the last token starting with + or - and
-    # whose absolute integer value matches the tenths convention.
+    # The temperature token is the last 5-char `±NNNN` token (sign + 4 digits
+    # of tenths of °C, including the +9999 sentinel). The `== 5` width avoids
+    # picking up shorter ISD quality flags like `+1` or `+123`.
     temp_token = None
     for tok in reversed(parts):
-        if (tok.startswith("+") or tok.startswith("-")) and len(tok) >= 4:
+        if len(tok) == 5 and (tok.startswith("+") or tok.startswith("-")):
             try:
                 int(tok)
                 temp_token = tok
@@ -83,10 +84,7 @@ def parse_isd_lines(lines: list[str]) -> pl.DataFrame:
 
     rows = sorted((iso, val) for iso, (_, val) in by_hour.items())
     if not rows:
-        return pl.DataFrame(
-            {"timestamp": [], "value": []},
-            schema={"timestamp": pl.Utf8, "value": pl.Float64},
-        )
+        return pl.DataFrame(schema={"timestamp": pl.Utf8, "value": pl.Float64})
     return pl.DataFrame(
         {
             "timestamp": [r[0] for r in rows],
