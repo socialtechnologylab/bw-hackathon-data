@@ -10,7 +10,7 @@ Returned feature row sits at forecast hour fxx = (t - c) hours.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta
 
 import polars as pl
@@ -35,7 +35,7 @@ def latest_cycle_for(
 def align_features(
     target: datetime,
     lead_hours: int,
-    gfs_cache: dict[datetime, pl.DataFrame],
+    gfs_cache: Mapping[datetime, pl.DataFrame],
 ) -> dict[str, float] | None:
     """Look up the feature row for `target` from the GFS cache.
 
@@ -54,5 +54,4 @@ def align_features(
     if row.is_empty():
         return None
     record = row.to_dicts()[0]
-    record.pop("fxx", None)
-    return record
+    return {k: v for k, v in record.items() if k != "fxx"}
