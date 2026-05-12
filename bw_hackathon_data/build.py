@@ -18,16 +18,16 @@ import polars as pl
 
 from bw_hackathon_data.align import align_features
 
-_X_COLS = [
-    "timestamp",
-    "ghi_fcst",
-    "t2m_fcst",
-    "wind10m_fcst",
-    "cloud_cover_fcst",
-    "hour",
-    "dow",
-    "month",
-]
+_X_SCHEMA = {
+    "timestamp": pl.Utf8,
+    "ghi_fcst": pl.Float64,
+    "t2m_fcst": pl.Float64,
+    "wind10m_fcst": pl.Float64,
+    "cloud_cover_fcst": pl.Float64,
+    "hour": pl.Int64,
+    "dow": pl.Int64,
+    "month": pl.Int64,
+}
 
 
 @dataclass
@@ -70,27 +70,29 @@ def build_task(
         target_df["value"].to_list(),
         strict=True,
     ):
+        t = datetime.fromisoformat(ts_str)
+        in_train = train_start <= t < train_end
+        in_test = test_start <= t < test_end
+        if not (in_train or in_test):
+            # Row falls outside both windows — irrelevant for this build.
+            # Don't count it toward `total` so drop_rate has the right denominator.
+            continue
+
         total += 1
         if val is None:
             drops += 1
             continue
-        t = datetime.fromisoformat(ts_str)
         feats = align_features(t, lead_hours, gfs_cache)
         if feats is None:
             drops += 1
             continue
 
-        in_train = train_start <= t < train_end
-        in_test = test_start <= t < test_end
-        if not (in_train or in_test):
-            continue  # outside both windows — silently skip
-
         x_row = {
             "timestamp": ts_str,
-            "ghi_fcst": float(feats["ghi_fcst"]),
-            "t2m_fcst": float(feats["t2m_fcst"]),
-            "wind10m_fcst": float(feats["wind10m_fcst"]),
-            "cloud_cover_fcst": float(feats["cloud_cover_fcst"]),
+            "ghi_fcst": feats["ghi_fcst"],
+            "t2m_fcst": feats["t2m_fcst"],
+            "wind10m_fcst": feats["wind10m_fcst"],
+            "cloud_cover_fcst": feats["cloud_cover_fcst"],
             "hour": t.hour,
             "dow": t.weekday(),
             "month": t.month,
@@ -103,24 +105,12 @@ def build_task(
             rows_test_x.append(x_row)
             ground_truth[ts_str] = float(val)
 
-    schema_x = {
-        "timestamp": pl.Utf8,
-        "ghi_fcst": pl.Float64,
-        "t2m_fcst": pl.Float64,
-        "wind10m_fcst": pl.Float64,
-        "cloud_cover_fcst": pl.Float64,
-        "hour": pl.Int64,
-        "dow": pl.Int64,
-        "month": pl.Int64,
-    }
     schema_y = {"timestamp": pl.Utf8, target_column: pl.Float64}
 
     return BuildResult(
-        x_train=pl.DataFrame(rows_x, schema=schema_x) if rows_x else pl.DataFrame(schema=schema_x),
-        y_train=pl.DataFrame(rows_y, schema=schema_y) if rows_y else pl.DataFrame(schema=schema_y),
-        x_test=pl.DataFrame(rows_test_x, schema=schema_x)
-        if rows_test_x
-        else pl.DataFrame(schema=schema_x),
+        x_train=pl.DataFrame(rows_x, schema=_X_SCHEMA),
+        y_train=pl.DataFrame(rows_y, schema=schema_y),
+        x_test=pl.DataFrame(rows_test_x, schema=_X_SCHEMA),
         ground_truth=ground_truth,
         drop_count=drops,
         total_count=total,
