@@ -14,40 +14,31 @@ BBOX_LON = (2.5, 6.5)
 
 # ── GFS variables ─────────────────────────────────────────────────────────────
 
-# Mapping from Herbie search strings (regex over the GRIB IDX) to the eventual
-# output column name in the cached parquet. UGRD/VGRD are combined to magnitude
-# downstream; cloud cover is divided by 100 to land in [0, 1].
-GFS_HERBIE_SEARCH = "|".join(
-    [
-        r":DSWRF:surface:",
-        r":TMP:2 m above ground:",
-        r":UGRD:10 m above ground:",
-        r":VGRD:10 m above ground:",
-        r":TCDC:entire atmosphere",
-    ]
-)
+# GFS forecast cycles are read from dynamical.org's ARCO Zarr (Apache 2.0,
+# public). The store is keyed by (init_time, lead_time, latitude, longitude),
+# is hourly out to 120h lead, and covers init_times back to 2021-05-01.
+# Reference: https://dynamical.org/catalog/noaa-gfs-forecast/
+GFS_ZARR_URL = "https://data.dynamical.org/noaa/gfs/forecast/latest.zarr"
 
 GFS_CYCLE_HOURS = (0, 6, 12, 18)
-# With 4 cycles/day the fxx values used per task are:
-#   solar/temp/demand-1d-ahead (lead=24h): fxx 24..29 (cutoff lands 24h behind target)
+# With 4 cycles/day the fxx (forecast hour) values used per task are:
+#   solar/temp/demand-1d-ahead (lead=24h): fxx 24..29 (latest cycle 24h before t)
 #   wind-2h-ahead (lead=2h): fxx 2..7
-# Covering both: range(2, 30).
+# Covering both with a single range:
 GFS_FXX_RANGE = range(2, 30)
 
-# After Herbie returns the GRIB-decoded Dataset, cfgrib names the variables
-# `sdswrf` (surface downward SW flux; used to be `dswrf` in older cfgrib),
-# `t2m`, `tcc`, `u10`, `v10`. The wind feature is u10/v10 combined into
-# magnitude under the synthetic name `wind10m_fcst`. This is the single
-# source of truth for the GRIB-var → feature-column mapping.
-#
-# NOTE: confirmed against GFS pgrb2.0p25 2025-01 via Herbie + cfgrib 0.9.x:
-#   dataset 4 returns var `sdswrf` (not `dswrf`).
+# Dynamical's GFS-forecast zarr exposes these data_vars (units in attrs):
+#   temperature_2m (°C), wind_u_10m, wind_v_10m, total_cloud_cover_atmosphere (%),
+#   downward_short_wave_radiation_flux_surface (W/m²), and ~15 more.
+# wind10m_fcst is derived downstream as sqrt(u² + v²); cloud_cover is scaled to 0–1.
 GFS_VAR_RENAME: dict[str, str] = {
-    "sdswrf": "ghi_fcst",
-    "t2m": "t2m_fcst",
-    "wind10m_fcst": "wind10m_fcst",
-    "tcc": "cloud_cover_fcst",
+    "downward_short_wave_radiation_flux_surface": "ghi_fcst",
+    "temperature_2m": "t2m_fcst",
+    "total_cloud_cover_atmosphere": "cloud_cover_fcst",
+    # u/v handled separately — combined to wind10m_fcst magnitude
 }
+GFS_WIND_U_VAR = "wind_u_10m"
+GFS_WIND_V_VAR = "wind_v_10m"
 
 
 # ── Task metadata ─────────────────────────────────────────────────────────────

@@ -1,19 +1,18 @@
 """GFS feature fetch + aggregation.
 
-`fetch_cycle` pulls one GFS init cycle from the AWS public S3 mirror via
-Herbie, byte-range-subsetting to the 4 variables we care about, then
-calls `aggregate_to_belgium_means` to produce the cached parquet row.
+`fetch_window` pulls a slice of GFS forecast cycles from dynamical.org's
+public ARCO Zarr store (Apache 2.0), area-means each variable over the
+Belgium bbox, and writes one parquet per init cycle to the cache dir.
 
 The aggregation is split out as a pure function so we can unit-test it
-without hitting the network. The network-hitting `fetch_cycle` is
-exercised only by the gated integration smoke test.
+without hitting the network. `fetch_window` is exercised only by the
+gated integration smoke test and by the full-pipeline build (Task 13+).
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import polars as pl
@@ -68,73 +67,95 @@ def aggregate_to_belgium_means(
     return pl.DataFrame(rows)
 
 
-def fetch_cycle(cycle: datetime, cache_dir: Path) -> Path:
-    """Fetch one GFS init cycle and write the aggregated parquet to cache_dir.
+def _open_zarr(url: str) -> xr.Dataset:
+    """Open the dynamical GFS-forecast zarr. Wrapped so tests can monkeypatch."""
+    return xr.open_zarr(url, consolidated=True)
 
-    Skips network if the target parquet already exists. Returns the parquet path.
+
+def fetch_window(
+    init_start: datetime,
+    init_end: datetime,
+    cache_dir: Path,
+    *,
+    fxx_range: range | None = None,
+    zarr_url: str | None = None,
+) -> int:
+    """Fetch all GFS init cycles in [init_start, init_end) from dynamical's zarr.
+
+    Writes one parquet per cycle to ``cache_dir/<YYYYmmddTHHMMZ>.parquet``,
+    keeping the same on-disk layout the earlier Herbie-based fetch produced.
+    Skips cycles whose parquet already exists.
+
+    Returns the number of cycles newly written.
     """
-    # Late import so unit tests don't need herbie installed in the import path.
-    from herbie import Herbie  # type: ignore[import-untyped]
-
-    out_path = cache_dir / f"{cycle.strftime('%Y%m%dT%H%MZ')}.parquet"
-    if out_path.exists():
-        return out_path
+    fxx = fxx_range or config.GFS_FXX_RANGE
+    url = zarr_url or config.GFS_ZARR_URL
 
     cache_dir.mkdir(parents=True, exist_ok=True)
-    fxx_list = list(config.GFS_FXX_RANGE)
 
-    dsets: list[xr.Dataset] = []
-    for fxx in fxx_list:
-        h = Herbie(
-            cycle.strftime("%Y-%m-%d %H:%M"),
-            model="gfs",
-            product="pgrb2.0p25",
-            fxx=fxx,
-            priority=["aws"],
-            verbose=False,
-        )
-        raw = h.xarray(config.GFS_HERBIE_SEARCH, remove_grib=True)
-        # If multiple xarray Datasets are returned (one per GRIB record group),
-        # merge them on the shared coords. Cast needed because Herbie has no
-        # type stubs and pyright infers an overly-broad return type.
-        if isinstance(raw, list):
-            # compat='override' is required: cfgrib splits T2m (2 m) and
-            # U10/V10 (10 m) into separate datasets that share the
-            # heightAboveGround coordinate but with different values.
-            # 'override' keeps the first dataset's coordinate value, which
-            # is harmless because we only use the data variables, not the
-            # heightAboveGround coord, in aggregate_to_belgium_means.
-            ds: xr.Dataset = xr.merge(cast(list[xr.Dataset], raw), compat="override")
-        else:
-            ds = cast(xr.Dataset, raw)
-        ds = ds.expand_dims({"step": [np.timedelta64(fxx, "h")]})
-        dsets.append(ds)
+    ds = _open_zarr(url)
 
-    merged = xr.concat(dsets, dim="step")
+    # Pick the columns we'll keep + the u/v components for the magnitude calc.
+    keep = list(config.GFS_VAR_RENAME) + [config.GFS_WIND_U_VAR, config.GFS_WIND_V_VAR]
 
-    # Combine U/V → wind10m_fcst then drop the originals.
-    if "u10" in merged.data_vars and "v10" in merged.data_vars:
-        merged["wind10m_fcst"] = (
-            ("step", "latitude", "longitude"),
-            combine_uv_to_speed(merged["u10"].values, merged["v10"].values),
-        )
-    if "tcc" in merged.data_vars:
-        merged["tcc"] = merged["tcc"] / 100.0  # → fraction
-    if "t2m" in merged.data_vars:
-        merged["t2m"] = merged["t2m"] - 273.15  # K → °C (cfgrib decodes t2m as Kelvin)
+    # Dynamical's lat is descending; slice high→low to keep native order.
+    bbox_lat_hi, bbox_lat_lo = config.BBOX_LAT[1], config.BBOX_LAT[0]
+    lead_lo = np.timedelta64(fxx.start, "h")
+    lead_hi = np.timedelta64(fxx.stop - 1, "h")
 
-    # Drop renames whose source variable wasn't returned for this cycle.
-    var_rename = {k: v for k, v in config.GFS_VAR_RENAME.items() if k in merged.data_vars}
-
-    df = aggregate_to_belgium_means(
-        merged,
-        cycle=cycle,
-        bbox_lat=config.BBOX_LAT,
-        bbox_lon=config.BBOX_LON,
-        var_rename=var_rename,
+    sliced = ds[keep].sel(
+        init_time=slice(np.datetime64(init_start.replace(tzinfo=None)),
+                        np.datetime64(init_end.replace(tzinfo=None))),
+        latitude=slice(bbox_lat_hi, bbox_lat_lo),
+        longitude=slice(*config.BBOX_LON),
+        lead_time=slice(lead_lo, lead_hi),
     )
 
-    tmp_path = out_path.with_suffix(".parquet.tmp")
-    df.write_parquet(tmp_path)
-    tmp_path.replace(out_path)
-    return out_path
+    # Area-mean over Belgium bbox (works once, batched across all init_times).
+    means = sliced.mean(dim=("latitude", "longitude")).load()
+
+    # Derive wind10m magnitude and rescale cloud cover here so the cached
+    # parquet matches the contract (W/m², °C, m/s, 0–1).
+    wind = combine_uv_to_speed(
+        means[config.GFS_WIND_U_VAR].values,
+        means[config.GFS_WIND_V_VAR].values,
+    )
+    means = means.drop_vars([config.GFS_WIND_U_VAR, config.GFS_WIND_V_VAR])
+    means["wind10m_fcst"] = (means.dims, wind)
+    if "total_cloud_cover_atmosphere" in means.data_vars:
+        means["total_cloud_cover_atmosphere"] = means["total_cloud_cover_atmosphere"] / 100.0
+
+    var_rename = {**config.GFS_VAR_RENAME, "wind10m_fcst": "wind10m_fcst"}
+
+    # The mean has already been computed, so we just write one parquet per
+    # init_time without re-invoking aggregate_to_belgium_means (which expects
+    # a still-gridded Dataset; ours is collapsed to scalars per lead_time).
+    fxx_hours = (means.lead_time.values / np.timedelta64(1, "h")).astype(int)
+
+    n_written = 0
+    for init_value in means.init_time.values:
+        init_ns = np.datetime64(init_value, "ns").astype("int64")
+        cycle = datetime.fromtimestamp(init_ns / 1e9, tz=config.UTC)
+        out_path = cache_dir / f"{cycle.strftime('%Y%m%dT%H%MZ')}.parquet"
+        if out_path.exists():
+            continue
+
+        per_cycle = means.sel(init_time=init_value)
+        cycle_iso = cycle.isoformat()
+        rows: dict[str, list] = {
+            "cycle_utc": [cycle_iso] * len(fxx_hours),
+            "valid_time": [
+                (cycle + timedelta(hours=int(h))).isoformat() for h in fxx_hours
+            ],
+            "fxx": fxx_hours.tolist(),
+        }
+        for src_name, out_name in var_rename.items():
+            rows[out_name] = per_cycle[src_name].values.astype(float).tolist()
+
+        df = pl.DataFrame(rows)
+        tmp = out_path.with_suffix(".parquet.tmp")
+        df.write_parquet(tmp)
+        tmp.replace(out_path)
+        n_written += 1
+
+    return n_written

@@ -1,16 +1,21 @@
-"""Fetch all GFS init cycles in the train + test window.
+"""Fetch all GFS init cycles in the train + test window from dynamical.org.
 
 Usage:
     uv run python scripts/fetch_gfs.py [--start YYYY-MM-DD] [--end YYYY-MM-DD]
 
-Default range: config.TRAIN_START → config.TEST_END (~4400 cycles, slow).
-For Task 12 (solar pilot), pass --start 2025-01-01 --end 2025-02-01.
+Default range: config.TRAIN_START → config.TEST_END.
+
+Reads from the public ARCO Zarr at config.GFS_ZARR_URL in a single windowed
+slice (much faster than the per-cycle Herbie byte-range approach the pilot
+used). Writes one parquet per init cycle into cache/gfs/, matching the
+layout build_all.py expects.
 """
 
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime, timedelta
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from bw_hackathon_data import config, gfs
@@ -32,27 +37,20 @@ def main() -> None:
     start = _parse_iso_date(args.start)
     end = _parse_iso_date(args.end)
 
-    CACHE.mkdir(parents=True, exist_ok=True)
-    current = start
-    n_done = 0
-    n_skipped = 0
-    while current < end:
-        for hour in config.GFS_CYCLE_HOURS:
-            cycle = current.replace(hour=hour, minute=0, second=0, microsecond=0)
-            if cycle < start or cycle >= end:
-                continue
-            out = CACHE / f"{cycle.strftime('%Y%m%dT%H%MZ')}.parquet"
-            if out.exists():
-                n_skipped += 1
-                continue
-            try:
-                gfs.fetch_cycle(cycle, CACHE)
-                n_done += 1
-            except Exception as exc:  # noqa: BLE001
-                print(f"[gfs] {cycle.isoformat()}: FAILED ({exc}); continuing")
-        current += timedelta(days=1)
+    print(f"[gfs] fetching dynamical zarr {start.date()} → {end.date()}")
+    print(f"[gfs]   variables: {sorted(config.GFS_VAR_RENAME) + ['wind10m_fcst (from u/v)']}")
+    print(f"[gfs]   fxx range: {config.GFS_FXX_RANGE.start}..{config.GFS_FXX_RANGE.stop - 1}")
+    print(f"[gfs]   bbox lat: {config.BBOX_LAT}, lon: {config.BBOX_LON}")
+    print(f"[gfs]   source:  {config.GFS_ZARR_URL}")
 
-    print(f"[gfs] done. fetched={n_done} skipped(cached)={n_skipped}")
+    t0 = time.time()
+    n_written = gfs.fetch_window(start, end, CACHE)
+    elapsed = time.time() - t0
+    total_in_cache = len(list(CACHE.glob("*.parquet")))
+    print(
+        f"[gfs] done. wrote={n_written} total_cached={total_in_cache} "
+        f"elapsed={elapsed:.1f}s"
+    )
 
 
 if __name__ == "__main__":
