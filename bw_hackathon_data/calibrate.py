@@ -42,8 +42,12 @@ def train_and_score(
     y_test: list[float],
     target_column: str,
 ) -> float:
-    """Train LightGBM on x_train / y_train, predict on x_test, return MAE."""
-    model = LGBMRegressor(n_estimators=200, verbose=-1, min_child_samples=1)
+    """Train LightGBM on x_train / y_train, predict on x_test, return MAE.
+
+    Params match the frozen participant baseline (`eval.py`) exactly so the
+    calibrated baseline_score lines up with what participants observe.
+    """
+    model = LGBMRegressor(n_estimators=200, verbosity=-1)
     model.fit(
         x_train.select(_FEATURE_COLS).to_pandas(),
         y_train[target_column].to_list(),
