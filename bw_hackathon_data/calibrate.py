@@ -1,8 +1,12 @@
-"""Baseline LightGBM training + MAE → baseline_score derivation.
+"""Baseline LightGBM training → MAE.
 
 `train_and_score` mirrors the participant baseline (n_estimators=200,
-default LightGBM hyperparameters) so the calibration matches what
-participants will see when they run eval.py.
+default LightGBM hyperparameters) so the reported MAE matches what
+participants will see when they run eval.py on the shipped parquets.
+
+The MAE is informational — used to populate the per-task README's
+"what good looks like" line. The endpoint compares raw predictions to
+ground truth; there's no normalization or baseline_score derivation.
 """
 
 from __future__ import annotations
@@ -24,16 +28,6 @@ _FEATURE_COLS = [
 ]
 
 
-def compute_baseline_score(mae: float) -> float:
-    """Map observed MAE to a baseline_score such that the LightGBM score = 0.5.
-
-    Concretely: baseline_score = 2 * MAE, rounded to 3 decimals.
-    The endpoint's score function is max(0, 1 - mae / baseline_score), so
-    a model achieving MAE = baseline_score / 2 lands at score = 0.5.
-    """
-    return round(2.0 * mae, 3)
-
-
 def train_and_score(
     *,
     x_train: pl.DataFrame,
@@ -45,7 +39,7 @@ def train_and_score(
     """Train LightGBM on x_train / y_train, predict on x_test, return MAE.
 
     Params match the frozen participant baseline (`eval.py`) exactly so the
-    calibrated baseline_score lines up with what participants observe.
+    reported MAE matches what a participant will see on first run.
     """
     model = LGBMRegressor(n_estimators=200, verbosity=-1)
     model.fit(

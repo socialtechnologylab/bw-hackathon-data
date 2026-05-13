@@ -1,4 +1,4 @@
-"""Run LightGBM on built parquets, derive baseline_score, write tasks.json + per-task READMEs.
+"""Run LightGBM on built parquets, record baseline MAE, write tasks.json + per-task READMEs.
 
 Usage:
     uv run python scripts/calibrate.py
@@ -59,11 +59,11 @@ README_TEMPLATE = """# {display_name} — data
 - {drop_count} of {total_count} hours dropped due to missing data ({drop_rate:.2%}).
 - Timestamps with no aligned GFS cycle are dropped silently.
 
-## Calibration
+## Baseline
 
-Observed baseline MAE: **{observed_mae:.3f} {metric_unit}**.
-`baseline_score` was set to **{baseline_score:.3f}** so the baseline LightGBM
-lands at score = 0.5. Calibrated {calibration_date}.
+Observed baseline MAE: **{observed_mae:.3f} {metric_unit}** from
+`LGBMRegressor(n_estimators=200, verbosity=-1)` on the listed feature
+columns. That's the number to beat. Measured {calibration_date}.
 
 Source: `bw-hackathon-data/scripts/calibrate.py`.
 """
@@ -113,23 +113,22 @@ def main() -> None:
             y_test=y_test,
             target_column=target_col,
         )
-        baseline_score = calibrate.compute_baseline_score(mae)
-        print(f"[calibrate] {task_id}: MAE={mae:.4f} → baseline_score={baseline_score}")
+        print(f"[baseline-mae] {task_id}: {mae:.4f} {_METRIC_UNIT[task_id]}")
 
         envelope = config.CALIBRATION_ENVELOPE.get(task_id)
         if envelope is not None and not (envelope[0] <= mae <= envelope[1]):
-            print(f"[calibrate] WARNING {task_id}: MAE {mae:.4f} outside envelope {envelope}")
+            print(f"[baseline-mae] WARNING {task_id}: MAE {mae:.4f} outside envelope {envelope}")
 
+        # tasks.json is metadata only — no baseline_score. Lower MAE = better;
+        # leaderboard sorts ascending on metric_value.
         tasks_json[task_id] = {
             "name": config.TASK_DISPLAY_NAME[task_id],
             "metric": config.TASK_METRIC_LABEL[task_id],
-            "baseline_score": baseline_score,
             "score_direction": "min",
         }
         calibration_summary[task_id] = {
-            "observed_mae": round(mae, 4),
-            "baseline_score": baseline_score,
-            "calibrated_score_at_baseline_mae": 0.5,
+            "baseline_mae": round(mae, 4),
+            "unit": _METRIC_UNIT[task_id],
         }
 
         drop = report[task_id]
@@ -151,7 +150,6 @@ def main() -> None:
             drop_rate=drop["drop_rate"],
             observed_mae=mae,
             metric_unit=_METRIC_UNIT[task_id],
-            baseline_score=baseline_score,
             calibration_date=calibration_date,
         )
         (task_dir / "README.md").write_text(readme)

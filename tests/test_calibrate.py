@@ -12,12 +12,7 @@ function runs and returns a sensible number.
 
 import polars as pl
 
-from bw_hackathon_data.calibrate import compute_baseline_score, train_and_score
-
-
-def test_compute_baseline_score_rounds_to_three_decimals():
-    assert compute_baseline_score(0.347) == 0.694
-    assert compute_baseline_score(0.0) == 0.0
+from bw_hackathon_data.calibrate import train_and_score
 
 
 def test_train_and_score_runs_on_tiny_data():
