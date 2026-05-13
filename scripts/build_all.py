@@ -38,7 +38,7 @@ def _load_target(task_id: str) -> pl.DataFrame:
         return pl.read_parquet(CACHE / "entsoe" / "solar.parquet")
     if task_id == "wind-2h-ahead":
         return pl.read_parquet(CACHE / "entsoe" / "wind.parquet")
-    if task_id == "demand-1d-ahead":
+    if task_id == "demand-1d-ahead-test":
         return pl.read_parquet(CACHE / "entsoe" / "demand.parquet")
     if task_id == "temp-1d-ahead":
         return pl.read_parquet(CACHE / "isd" / "temp.parquet")

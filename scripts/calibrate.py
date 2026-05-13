@@ -77,14 +77,14 @@ _TARGET_PROVENANCE = {
     "temp-1d-ahead": (
         "NOAA ISD station 064510 (EBBR / Brussels Airport), hourly METAR-derived t2m"
     ),
-    "demand-1d-ahead": "ENTSO-E Actual Total Load, Belgium",
+    "demand-1d-ahead-test": "ENTSO-E Actual Total Load, Belgium",
 }
 
 _METRIC_UNIT = {
     "solar-1d-ahead": "MWh",
     "wind-2h-ahead": "MWh",
     "temp-1d-ahead": "°C",
-    "demand-1d-ahead": "MWh",
+    "demand-1d-ahead-test": "MWh",
 }
 
 

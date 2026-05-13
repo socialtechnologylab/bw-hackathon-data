@@ -46,31 +46,31 @@ GFS_WIND_V_VAR = "wind_v_10m"
 TASK_IDS = (
     "solar-1d-ahead",
     "wind-2h-ahead",
-    "demand-1d-ahead",
+    "demand-1d-ahead-test",
 )
 
 TASK_LEAD_HOURS = {
     "solar-1d-ahead": 24,
     "wind-2h-ahead": 2,
-    "demand-1d-ahead": 24,
+    "demand-1d-ahead-test": 24,
 }
 
 TASK_TARGET_COLUMN = {
     "solar-1d-ahead": "solar_mwh",
     "wind-2h-ahead": "wind_mwh",
-    "demand-1d-ahead": "demand_mwh",
+    "demand-1d-ahead-test": "demand_mwh",
 }
 
 TASK_DISPLAY_NAME = {
     "solar-1d-ahead": "Day-ahead solar energy (Belgium aggregate)",
     "wind-2h-ahead": "2-hour-ahead wind energy (Belgium aggregate)",
-    "demand-1d-ahead": "Day-ahead electricity demand (Belgium total)",
+    "demand-1d-ahead-test": "Day-ahead electricity demand (Belgium total)",
 }
 
 TASK_METRIC_LABEL = {
     "solar-1d-ahead": "MAE (MWh)",
     "wind-2h-ahead": "MAE (MWh)",
-    "demand-1d-ahead": "MAE (MWh)",
+    "demand-1d-ahead-test": "MAE (MWh)",
 }
 
 
@@ -104,7 +104,7 @@ TEST_END = datetime(2026, 1, 1, tzinfo=UTC)
 DROP_THRESHOLD = {
     "solar-1d-ahead": 0.01,
     "wind-2h-ahead": 0.01,
-    "demand-1d-ahead": 0.01,
+    "demand-1d-ahead-test": 0.01,
 }
 
 # Calibration sanity envelopes (min_mae, max_mae). Populated AFTER the solar
