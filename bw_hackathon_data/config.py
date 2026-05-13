@@ -46,35 +46,30 @@ GFS_WIND_V_VAR = "wind_v_10m"
 TASK_IDS = (
     "solar-1d-ahead",
     "wind-2h-ahead",
-    "temp-1d-ahead",
     "demand-1d-ahead",
 )
 
 TASK_LEAD_HOURS = {
     "solar-1d-ahead": 24,
     "wind-2h-ahead": 2,
-    "temp-1d-ahead": 24,
     "demand-1d-ahead": 24,
 }
 
 TASK_TARGET_COLUMN = {
     "solar-1d-ahead": "solar_mwh",
     "wind-2h-ahead": "wind_mwh",
-    "temp-1d-ahead": "temp_c",
     "demand-1d-ahead": "demand_mwh",
 }
 
 TASK_DISPLAY_NAME = {
     "solar-1d-ahead": "Day-ahead solar energy (Belgium aggregate)",
     "wind-2h-ahead": "2-hour-ahead wind energy (Belgium aggregate)",
-    "temp-1d-ahead": "Day-ahead temperature (Brussels EBBR)",
     "demand-1d-ahead": "Day-ahead electricity demand (Belgium total)",
 }
 
 TASK_METRIC_LABEL = {
     "solar-1d-ahead": "MAE (MWh)",
     "wind-2h-ahead": "MAE (MWh)",
-    "temp-1d-ahead": "MAE (°C)",
     "demand-1d-ahead": "MAE (MWh)",
 }
 
@@ -106,11 +101,9 @@ TEST_END = datetime(2026, 1, 1, tzinfo=UTC)
 # ── Sanity thresholds ─────────────────────────────────────────────────────────
 
 # Maximum acceptable fraction of rows dropped during build, per task.
-# Temp gets a looser threshold because METAR coverage is patchier than ENTSO-E.
 DROP_THRESHOLD = {
     "solar-1d-ahead": 0.01,
     "wind-2h-ahead": 0.01,
-    "temp-1d-ahead": 0.03,
     "demand-1d-ahead": 0.01,
 }
 
