@@ -1,5 +1,14 @@
 """Tar `release/` and create a GitHub release.
 
+Cuts two tarballs:
+  1. <name>-participant.tar.gz  — parquets + per-task README only.
+     This is the PUBLIC artefact attached to the GitHub release;
+     participants download it via participant_template/scripts/download_data.py.
+     Contains zero ground-truth labels.
+  2. <name>-full.tar.gz         — everything (participant/ + endpoint/).
+     Kept locally for the trainer to push to /var/lib/bw-endpoint/state/.
+     NOT uploaded anywhere public.
+
 Usage:
     uv run python scripts/release.py --tag v1.0.0 [--repo <owner>/<name>]
 """
@@ -26,7 +35,8 @@ def main() -> None:
 
     build_date = date.today().isoformat()
     top_level = f"bw-hackathon-data-{build_date}"
-    tarball = BUILD_DIR / f"{top_level}.tar.gz"
+    participant_tarball = BUILD_DIR / f"{top_level}-participant.tar.gz"
+    full_tarball = BUILD_DIR / f"{top_level}-full.tar.gz"
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
     calibration = json.loads((RELEASE_DIR / "endpoint" / "calibration_summary.json").read_text())
@@ -43,29 +53,43 @@ def main() -> None:
     )
     print(f"[release] manifest → {manifest_path}")
 
-    sha = release.tar_release(RELEASE_DIR, tarball, top_level)
-    print(f"[release] tarball → {tarball}  (SHA256: {sha})")
+    # Participant-only tarball: parquets + READMEs. NO ground_truth.
+    participant_sha = release.tar_release(
+        RELEASE_DIR, participant_tarball, top_level, include=("participant",)
+    )
+    print(f"[release] participant tarball → {participant_tarball}  (SHA256: {participant_sha})")
+
+    # Full tarball: includes endpoint/. Kept locally only.
+    full_sha = release.tar_release(RELEASE_DIR, full_tarball, top_level)
+    print(f"[release] full tarball       → {full_tarball}  (SHA256: {full_sha})")
+    print(f"[release]   (full tarball is internal — push only its endpoint/ to /var/lib/<app>)")
 
     notes_path = BUILD_DIR / "release_notes.md"
     notes_path.write_text(
         f"# bw-hackathon-data {args.tag}\n\n"
-        f"Built {build_date}. Tarball SHA256: `{sha}`.\n\n"
-        f"## Calibration\n\n"
+        f"Built {build_date}. Participant tarball SHA256: `{participant_sha}`.\n\n"
+        f"This release ships **{participant_tarball.name}** — the per-task\n"
+        f"parquets and READMEs only. `ground_truth.json` lives on the\n"
+        f"scoring endpoint and is not in this archive.\n\n"
+        f"## Baseline MAE per task\n\n"
         + "\n".join(
-            f"- **{task}**: observed MAE = {info['observed_mae']:.4f}, "
-            f"baseline_score = {info['baseline_score']}"
+            f"- **{task}**: {info['baseline_mae']:.4f} {info['unit']}"
             for task, info in calibration.items()
         )
         + "\n"
     )
 
-    url = release.gh_release_create(args.tag, tarball, notes_path, repo=args.repo)
+    url = release.gh_release_create(args.tag, participant_tarball, notes_path, repo=args.repo)
     print(f"[release] {url}")
     print()
-    print(f"  RELEASE_URL = '{url}'")
-    print(f"  EXPECTED_SHA = '{sha}'")
+    asset_url = url.replace(
+        f"/releases/tag/{args.tag}",
+        f"/releases/download/{args.tag}/{participant_tarball.name}",
+    )
+    print(f"  RELEASE_URL  = '{asset_url}'")
+    print(f"  EXPECTED_SHA = '{participant_sha}'")
     print()
-    print("Paste these into bw-training/participant_template/scripts/download_data.py (Task 16).")
+    print("Paste these into bw-training/participant_template/scripts/download_data.py.")
 
 
 if __name__ == "__main__":

@@ -58,17 +58,39 @@ def write_manifest(
     return out
 
 
-def tar_release(release_dir: Path, tarball_path: Path, top_level_name: str) -> str:
+def tar_release(
+    release_dir: Path,
+    tarball_path: Path,
+    top_level_name: str,
+    *,
+    include: tuple[str, ...] | None = None,
+) -> str:
     """Tar `release_dir` into tarball_path with a single top-level directory.
+
+    `include`: optional tuple of subdirectory prefixes (relative to release_dir)
+    to limit the archive to. Each path is included iff its relative-to-release_dir
+    starts with one of those prefixes OR equals one of them. If None, everything
+    under release_dir is tarred.
+
+    Use case: emitting a participant-only tarball (`include=('participant',)`)
+    so the public release artefact does NOT carry the endpoint state — in
+    particular `endpoint/ground_truth.json`, which is y_test for the workshop
+    tasks and must not be shipped to participants.
 
     Returns the tarball's SHA256.
     """
     tarball_path.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(tarball_path, "w:gz") as tar:
         for path in sorted(release_dir.rglob("*")):
-            if path.is_file():
-                arcname = Path(top_level_name) / path.relative_to(release_dir)
-                tar.add(path, arcname=arcname.as_posix())
+            if not path.is_file():
+                continue
+            rel = path.relative_to(release_dir).as_posix()
+            if include is not None:
+                top = rel.split("/", 1)[0]
+                if top not in include:
+                    continue
+            arcname = Path(top_level_name) / path.relative_to(release_dir)
+            tar.add(path, arcname=arcname.as_posix())
     return sha256_of(tarball_path)
 
 
