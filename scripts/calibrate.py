@@ -73,7 +73,7 @@ _TARGET_PROVENANCE = {
     "solar-1d-ahead": (
         "ENTSO-E B16 (Solar) actual generation, Belgium control area (10YBE----------2)"
     ),
-    "wind-1d-ahead": ("ENTSO-E B17 (Wind Onshore) + B18 (Wind Offshore) summed, Belgium"),
+    "wind-1d-ahead": ("ENTSO-E B19 (Wind Onshore) + B18 (Wind Offshore) summed, Belgium"),
     "temp-1d-ahead": (
         "NOAA ISD station 064510 (EBBR / Brussels Airport), hourly METAR-derived t2m"
     ),
