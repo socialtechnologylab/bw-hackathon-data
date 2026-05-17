@@ -48,17 +48,43 @@ def fetch_solar(client: Any, start: datetime, end: datetime) -> pl.DataFrame:
         end=pd.Timestamp(end),
         psr_type=config.ENTSOE_PSR_SOLAR,
     )
-    series = df[config.ENTSOE_PSR_SOLAR] if config.ENTSOE_PSR_SOLAR in df.columns else df.iloc[:, 0]
-    return _series_to_parquet_df(series)
+    return _series_to_parquet_df(_extract_aggregated(df, "Solar"))
+
+
+def _extract_aggregated(df: pd.DataFrame, expected_label: str) -> pd.Series:
+    """Pull the 'Actual Aggregated' series from a query_generation response.
+
+    entsoe-py returns two shapes depending on whether the PSR has a
+    consumption component:
+      - Flat: one column named after the human label (e.g. 'Wind Onshore').
+      - MultiIndex: ('<label>', 'Actual Aggregated') + ('<label>', 'Actual
+        Consumption') — Wind Offshore, Pumped Storage, etc.
+    Fails loud if `expected_label` doesn't appear — silent column fallback
+    is how 'B17 returns Waste' went unnoticed.
+    """
+    if isinstance(df.columns, pd.MultiIndex):
+        labels = list(df.columns.get_level_values(0).unique())
+        if expected_label not in labels:
+            raise ValueError(
+                f"expected '{expected_label}' in entsoe response, got {labels!r}"
+            )
+        return df[(expected_label, "Actual Aggregated")]
+    if expected_label in df.columns:
+        return df[expected_label]
+    raise ValueError(
+        f"expected '{expected_label}' column in entsoe response, got {list(df.columns)!r}"
+    )
 
 
 def fetch_wind(client: Any, start: datetime, end: datetime) -> pl.DataFrame:
-    """B17 (Wind Onshore) + B18 (Wind Offshore) summed, Belgium, hourly MWh.
+    """B19 (Wind Onshore) + B18 (Wind Offshore) summed, Belgium, hourly MWh.
 
-    Onshore tolerates a first-column fallback (entsoe-py occasionally returns
-    the series under an unexpected name). Offshore requires the B18 column
-    exactly — if it's missing or empty, treat as zero rather than risk
-    silently picking up the wrong PSR.
+    ENTSO-E PSR codes per the EIC reference manual: B17=Waste, B18=Wind
+    Offshore, B19=Wind Onshore. An earlier version of this module used B17
+    for onshore (it's actually Waste); the bug went unnoticed because the
+    fetch fell back to `iloc[:, 0]` when the label-keyed lookup missed,
+    silently shipping Waste generation as 'wind'. Fixed: PSR code corrected
+    and extraction now fails loud if the expected label isn't present.
     """
     onshore = client.query_generation(
         country_code=config.ENTSOE_AREA_BE,
@@ -73,18 +99,9 @@ def fetch_wind(client: Any, start: datetime, end: datetime) -> pl.DataFrame:
         psr_type=config.ENTSOE_PSR_WIND_OFFSHORE,
     )
 
-    s_on: pd.Series = (
-        onshore[config.ENTSOE_PSR_WIND_ONSHORE]
-        if config.ENTSOE_PSR_WIND_ONSHORE in onshore.columns
-        else onshore.iloc[:, 0]
-    )
-    s_off: pd.Series | None = (
-        offshore[config.ENTSOE_PSR_WIND_OFFSHORE]
-        if config.ENTSOE_PSR_WIND_OFFSHORE in offshore.columns
-        else None
-    )
-
-    summed = s_on if s_off is None else s_on.add(s_off, fill_value=0.0)
+    s_on = _extract_aggregated(onshore, "Wind Onshore")
+    s_off = _extract_aggregated(offshore, "Wind Offshore")
+    summed = s_on.add(s_off, fill_value=0.0)
     return _series_to_parquet_df(summed)
 
 

@@ -22,10 +22,8 @@ GFS_ZARR_URL = "https://data.dynamical.org/noaa/gfs/forecast/latest.zarr"
 
 GFS_CYCLE_HOURS = (0, 6, 12, 18)
 # With 4 cycles/day the fxx (forecast hour) values used per task are:
-#   solar/temp/demand-1d-ahead (lead=24h): fxx 24..29 (latest cycle 24h before t)
-#   wind-2h-ahead (lead=2h): fxx 2..7
-# Covering both with a single range:
-GFS_FXX_RANGE = range(2, 30)
+#   solar/wind/demand-1d-ahead (lead=24h): fxx 24..29 (latest cycle 24h before t)
+GFS_FXX_RANGE = range(24, 30)
 
 # Dynamical's GFS-forecast zarr exposes these data_vars (units in attrs):
 #   temperature_2m (°C), wind_u_10m, wind_v_10m, total_cloud_cover_atmosphere (%),
@@ -45,31 +43,31 @@ GFS_WIND_V_VAR = "wind_v_10m"
 
 TASK_IDS = (
     "solar-1d-ahead",
-    "wind-2h-ahead",
+    "wind-1d-ahead",
     "demand-1d-ahead-test",
 )
 
 TASK_LEAD_HOURS = {
     "solar-1d-ahead": 24,
-    "wind-2h-ahead": 2,
+    "wind-1d-ahead": 24,
     "demand-1d-ahead-test": 24,
 }
 
 TASK_TARGET_COLUMN = {
     "solar-1d-ahead": "solar_mwh",
-    "wind-2h-ahead": "wind_mwh",
+    "wind-1d-ahead": "wind_mwh",
     "demand-1d-ahead-test": "demand_mwh",
 }
 
 TASK_DISPLAY_NAME = {
     "solar-1d-ahead": "Day-ahead solar energy (Belgium aggregate)",
-    "wind-2h-ahead": "2-hour-ahead wind energy (Belgium aggregate)",
+    "wind-1d-ahead": "Day-ahead wind energy (Belgium aggregate)",
     "demand-1d-ahead-test": "Day-ahead electricity demand (Belgium total)",
 }
 
 TASK_METRIC_LABEL = {
     "solar-1d-ahead": "MAE (MWh)",
-    "wind-2h-ahead": "MAE (MWh)",
+    "wind-1d-ahead": "MAE (MWh)",
     "demand-1d-ahead-test": "MAE (MWh)",
 }
 
@@ -78,7 +76,7 @@ TASK_METRIC_LABEL = {
 
 ENTSOE_AREA_BE = "10YBE----------2"  # Belgium control area
 ENTSOE_PSR_SOLAR = "B16"
-ENTSOE_PSR_WIND_ONSHORE = "B17"
+ENTSOE_PSR_WIND_ONSHORE = "B19"
 ENTSOE_PSR_WIND_OFFSHORE = "B18"
 
 
@@ -103,7 +101,7 @@ TEST_END = datetime(2026, 1, 1, tzinfo=UTC)
 # Maximum acceptable fraction of rows dropped during build, per task.
 DROP_THRESHOLD = {
     "solar-1d-ahead": 0.01,
-    "wind-2h-ahead": 0.01,
+    "wind-1d-ahead": 0.01,
     "demand-1d-ahead-test": 0.01,
 }
 

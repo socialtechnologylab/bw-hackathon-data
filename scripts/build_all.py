@@ -1,7 +1,7 @@
 """Build per-task parquets + ground_truth from the populated cache.
 
 Usage:
-    uv run python scripts/build_all.py [--tasks solar-1d-ahead,wind-2h-ahead,...]
+    uv run python scripts/build_all.py [--tasks solar-1d-ahead,wind-1d-ahead,...]
 
 Reads cache/entsoe/<series>.parquet, cache/isd/temp.parquet, and
 cache/gfs/<cycle>.parquet. Writes release/participant/<task>/* and
@@ -36,7 +36,7 @@ def _load_gfs_cache() -> dict[datetime, pl.DataFrame]:
 def _load_target(task_id: str) -> pl.DataFrame:
     if task_id == "solar-1d-ahead":
         return pl.read_parquet(CACHE / "entsoe" / "solar.parquet")
-    if task_id == "wind-2h-ahead":
+    if task_id == "wind-1d-ahead":
         return pl.read_parquet(CACHE / "entsoe" / "wind.parquet")
     if task_id == "demand-1d-ahead-test":
         return pl.read_parquet(CACHE / "entsoe" / "demand.parquet")
